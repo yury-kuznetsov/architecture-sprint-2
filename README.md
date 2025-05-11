@@ -32,22 +32,26 @@ docker exec -it configSrv mongosh --port 27017
 Инициализируйте шарды:
 
 ```shell
-docker exec -it shard1 mongosh --port 27018
+docker exec -it shard1-1 mongosh --port 27019
 
 > rs.initiate({
   _id : "shard1",
   members: [
-    { _id : 0, host : "shard1:27018" },
+    { _id : 0, host : "shard1-1:27019" },
+    { _id : 1, host : "shard1-2:27019" },
+    { _id : 2, host : "shard1-3:27019" },
   ]
 });
 > exit();
 
-docker exec -it shard2 mongosh --port 27019
+docker exec -it shard2-1 mongosh --port 27020
 
 > rs.initiate({
   _id : "shard2",
   members: [
-    { _id : 1, host : "shard2:27019" }
+    { _id : 0, host : "shard2-1:27020" },
+    { _id : 1, host : "shard2-2:27020" },
+    { _id : 2, host : "shard2-3:27020" },
   ]
 });
 > exit(); 
@@ -56,10 +60,10 @@ docker exec -it shard2 mongosh --port 27019
 Инцициализируйте роутер и наполните его тестовыми данными:
 
 ```shell
-docker exec -it mongos_router mongosh --port 27020
+docker exec -it mongos_router mongosh --port 27018
 
-> sh.addShard( "shard1/shard1:27018");
-> sh.addShard( "shard2/shard2:27019");
+> sh.addShard( "shard1/shard1-1:27019,shard1-2:27019,shard1-3:27019");
+> sh.addShard( "shard2/shard2-1:27020,shard2-2:27020,shard2-3:27020");
 
 > sh.enableSharding("somedb");
 > sh.shardCollection("somedb.helloDoc", { "name" : "hashed" } )
