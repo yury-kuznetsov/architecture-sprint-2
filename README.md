@@ -75,3 +75,5 @@ curl  -X PUT http://127.0.0.1:9180/apisix/admin/routes \
 ```shell
 curl "http://127.0.0.1:9080/docs" 
 ```
+
+[Ссылка на схему](https://www.dropbox.com/scl/fi/joodumbv736jcyc6ed369/sprint-2.drawio?rlkey=9kcq2aclnx10azdbab65onf62&st=07oanh1c&dl=0)
