@@ -1,24 +1,261 @@
-services:
-  mongodb1:
-    container_name: mongodb1
-    image: dh-mirror.gitverse.ru/mongo:latest
-    volumes:
-      - mongodb1_data_container:/data/db
+name: sharding-repl-cache
 
-  pymongo_api:
-    container_name: pymongo_api
-    build: 
+services:
+  mongo-config:
+    image: mongo:latest
+    container_name: mongo-config
+    restart: always
+    ports:
+      - "27017:27017"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.8
+    volumes:
+      - mongo-config-data:/data/db
+    command:
+      [
+        "--configsvr",
+        "--replSet", "config_server",
+        "--bind_ip_all",
+        "--port", "27017"
+      ]
+
+  mongo-shard-1-1:
+    image: mongo:latest
+    container_name: mongo-shard-1-1
+    restart: always
+    ports:
+      - "27019:27019"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.10
+    volumes:
+      - mongo-shard-1-1-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard1",
+        "--bind_ip_all",
+        "--port", "27019"
+      ]
+
+  mongo-shard-1-2:
+    image: mongo:latest
+    container_name: mongo-shard-1-2
+    restart: always
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.11
+    volumes:
+      - mongo-shard-1-2-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard1",
+        "--bind_ip_all",
+        "--port", "27019"
+      ]
+
+  mongo-shard-1-3:
+    image: mongo:latest
+    container_name: mongo-shard-1-3
+    restart: always
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.12
+    volumes:
+      - mongo-shard-1-3-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard1",
+        "--bind_ip_all",
+        "--port", "27019"
+      ]
+
+  mongo-shard-2-1:
+    image: mongo:latest
+    container_name: mongo-shard-2-1
+    restart: always
+    ports:
+      - "27020:27020"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.13
+    volumes:
+      - mongo-shard-2-1-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard2",
+        "--bind_ip_all",
+        "--port", "27020"
+      ]
+
+  mongo-shard-2-2:
+    image: mongo:latest
+    container_name: mongo-shard-2-2
+    restart: always
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.14
+    volumes:
+      - mongo-shard-2-2-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard2",
+        "--bind_ip_all",
+        "--port", "27020"
+      ]
+
+  mongo-shard-2-3:
+    image: mongo:latest
+    container_name: mongo-shard-2-3
+    restart: always
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.15
+    volumes:
+      - mongo-shard-2-3-data:/data/db
+    command:
+      [
+        "--shardsvr",
+        "--replSet", "shard2",
+        "--bind_ip_all",
+        "--port", "27020"
+      ]
+
+  mongo-router:
+    image: mongo:latest
+    container_name: mongo-router
+    restart: always
+    ports:
+      - "27018:27018"
+    depends_on:
+      - mongo-config
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.9
+    command:
+      [
+        "mongos",
+        "--configdb", "config_server/mongo-config:27017",
+        "--bind_ip_all",
+        "--port", "27018"
+      ]
+
+  mongo-init:
+    image: mongo:latest
+    container_name: mongo-init
+    depends_on:
+      - mongo-config
+      - mongo-shard-1-1
+      - mongo-shard-1-2
+      - mongo-shard-1-3
+      - mongo-shard-2-1
+      - mongo-shard-2-2
+      - mongo-shard-2-3
+      - mongo-router
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.16
+    volumes:
+      - ./scripts:/init
+    entrypoint: [ "/bin/bash", "/init/init.sh" ]
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.17
+
+  web-1:
+    container_name: web-1
+    build:
       context: api_app
       dockerfile: Dockerfile
     image: kazhem/pymongo_api:1.0.0
-    depends_on:
-      - mongodb1
     ports:
       - 8080:8080
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.18
     environment:
-      MONGODB_URL: "mongodb://mongodb1"
+      MONGODB_URL: "mongodb://mongo-router:27018"
       MONGODB_DATABASE_NAME: "somedb"
+      REDIS_URL: "redis://redis:6379"
 
+  web-2:
+    container_name: web-2
+    image: kazhem/pymongo_api:1.0.0
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.19
+    environment:
+      MONGODB_URL: "mongodb://mongo-router:27018"
+      MONGODB_DATABASE_NAME: "somedb"
+      REDIS_URL: "redis://redis:6379"
+
+  etcd:
+    image: bitnami/etcd:latest
+    container_name: etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+    ports:
+      - 2379:2379
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.20
+
+  apisix:
+    image: apache/apisix:latest
+    container_name: apisix
+    depends_on:
+      - etcd
+    ports:
+      - "9080:9080"     # API Gateway
+      - "9180:9180"     # Admin API
+      - "9092:9092"     # Control
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.21
+    volumes:
+      - ./config/apisix.yaml:/usr/local/apisix/conf/config.yaml:ro
+    environment:
+      - APISIX_ETCD_HOST=http://etcd:2379
+
+  consul:
+    image: consul:1.15.1
+    container_name: consul
+    ports:
+      - "8500:8500"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.22
+    command: "agent -dev -client=0.0.0.0"
+
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 173.17.0.0/16
 
 volumes:
-  mongodb1_data_container:
+  mongo-config-data:
+  mongo-shard-1-1-data:
+  mongo-shard-1-2-data:
+  mongo-shard-1-3-data:
+  mongo-shard-2-1-data:
+  mongo-shard-2-2-data:
+  mongo-shard-2-3-data:
+  redis-data:
