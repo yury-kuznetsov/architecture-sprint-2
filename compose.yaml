@@ -175,9 +175,9 @@ services:
       app-network:
         ipv4_address: 173.17.0.17
 
-  pymongo-api:
-    container_name: pymongo-api
-    build: 
+  web-1:
+    container_name: web-1
+    build:
       context: api_app
       dockerfile: Dockerfile
     image: kazhem/pymongo_api:1.0.0
@@ -190,6 +190,57 @@ services:
       MONGODB_URL: "mongodb://mongo-router:27018"
       MONGODB_DATABASE_NAME: "somedb"
       REDIS_URL: "redis://redis:6379"
+
+  web-2:
+    container_name: web-2
+    image: kazhem/pymongo_api:1.0.0
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.19
+    environment:
+      MONGODB_URL: "mongodb://mongo-router:27018"
+      MONGODB_DATABASE_NAME: "somedb"
+      REDIS_URL: "redis://redis:6379"
+
+  etcd:
+    image: bitnami/etcd:latest
+    container_name: etcd
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+      - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+    ports:
+      - 2379:2379
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.20
+
+  apisix:
+    image: apache/apisix:latest
+    container_name: apisix
+    depends_on:
+      - etcd
+    ports:
+      - "9080:9080"     # API Gateway
+      - "9180:9180"     # Admin API
+      - "9092:9092"     # Control
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.21
+    volumes:
+      - ./config/apisix.yaml:/usr/local/apisix/conf/config.yaml:ro
+    environment:
+      - APISIX_ETCD_HOST=http://etcd:2379
+
+  consul:
+    image: consul:1.15.1
+    container_name: consul
+    ports:
+      - "8500:8500"
+    networks:
+      app-network:
+        ipv4_address: 173.17.0.22
+    command: "agent -dev -client=0.0.0.0"
 
 networks:
   app-network:
